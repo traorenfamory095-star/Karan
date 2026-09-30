@@ -1,231 +1,262 @@
 package com.example.karan.viewmodels
 
-/*
- * ============================================================
- * QUIZ VIEWMODEL — INSTRUCTIONS DE TRAVAIL
- * ============================================================
- *
- * 👤 Responsable : Mamadou Alpha Diallo
- *
- * 🎯 OBJECTIF :
- * QuizViewModel contient toute la logique métier nécessaire
- * au déroulement d'un quiz.
- *
- * Il constitue le cerveau du QuizScreen.
- *
- * ------------------------------------------------------------
- * 🔄 FLUX :
- *
- * QuizScreen
- *      ↓
- * QuizViewModel
- *      ↓
- * RevisionRepository
- *      ↓
- * QuestionDao
- *      ↓
- * Room
- *
- * ------------------------------------------------------------
- * 📥 PARAMÈTRES DU QUIZ :
- *
- * Le ViewModel devra recevoir/prendre en compte :
- *
- * - l'examen : BAC ou BEPC ;
- * - l'identifiant de la matière ;
- * - le nombre de questions choisi.
- *
- * Ces informations permettent de récupérer les bonnes
- * questions depuis le Repository.
- *
- * ------------------------------------------------------------
- * ❓ GESTION DES QUESTIONS :
- *
- * Le ViewModel devra :
- *
- * - charger les questions ;
- * - conserver la liste du quiz actuel ;
- * - connaître l'index de la question actuelle ;
- * - afficher une question à la fois ;
- * - passer à la question suivante ;
- * - détecter la fin du quiz.
- *
- * ------------------------------------------------------------
- * 📝 GESTION DES RÉPONSES :
- *
- * Lorsqu'un élève choisit une proposition :
- *
- * 1. récupérer la réponse choisie ;
- * 2. comparer avec la bonne réponse ;
- * 3. déterminer si elle est correcte ;
- * 4. mettre à jour le score ;
- * 5. mémoriser la réponse donnée ;
- * 6. identifier une éventuelle erreur ;
- * 7. afficher la correction ;
- * 8. afficher l'explication.
- *
- * ------------------------------------------------------------
- * 🎯 SCORE :
- *
- * Le calcul du score appartient au ViewModel.
- *
- * Exemple :
- *
- * 8 bonnes réponses sur 10
- *
- * → score : 8 / 10
- *
- * Le ViewModel devra également pouvoir calculer le
- * pourcentage de réussite si nécessaire.
- *
- * ------------------------------------------------------------
- * ❌ ERREURS À REVOIR :
- *
- * Lorsqu'une réponse est incorrecte, la question devra
- * pouvoir être identifiée comme une erreur.
- *
- * Ces informations pourront ensuite être utilisées pour
- * permettre à l'élève de revoir ses erreurs.
- *
- * ⚠️ Le mécanisme exact de persistance devra être défini
- * avec le modèle de données et le Repository.
- *
- * ------------------------------------------------------------
- * ⏱️ CHRONOMÈTRE :
- *
- * Le ViewModel est responsable du chronomètre.
- *
- * Il devra :
- *
- * - démarrer le temps ;
- * - maintenir le temps restant ;
- * - mettre à jour l'état ;
- * - détecter lorsque le temps arrive à zéro ;
- * - terminer le quiz si nécessaire ;
- * - arrêter le chronomètre lorsque le quiz est terminé.
- *
- * ❌ Le chronomètre ne doit pas être géré directement
- * dans le Composable.
- *
- * ------------------------------------------------------------
- * 🌊 STATEFLOW :
- *
- * Utiliser StateFlow pour exposer l'état du quiz.
- *
- * L'état devra pouvoir représenter notamment :
- *
- * - chargement ;
- * - quiz prêt ;
- * - question actuelle ;
- * - réponse sélectionnée ;
- * - correction affichée ;
- * - temps restant ;
- * - score ;
- * - quiz terminé ;
- * - erreur ;
- * - aucune question disponible.
- *
- * ------------------------------------------------------------
- * 🔒 RÉPONSE DÉJÀ DONNÉE :
- *
- * Après sélection d'une réponse :
- *
- * - empêcher une deuxième réponse ;
- * - conserver la réponse choisie ;
- * - afficher la correction ;
- * - afficher l'explication ;
- * - permettre ensuite de passer à la question suivante.
- *
- * ------------------------------------------------------------
- * 💾 FIN DU QUIZ :
- *
- * Lorsque le quiz est terminé, le ViewModel devra préparer
- * les informations nécessaires à la création d'une
- * SessionQuiz.
- *
- * La session devra ensuite être enregistrée localement
- * via RevisionRepository.
- *
- * ------------------------------------------------------------
- * 🧠 RESPONSABILITÉS :
- *
- * QuizViewModel est responsable de la logique métier du quiz.
- *
- * Il peut donc gérer :
- *
- * ✅ score
- * ✅ réponses
- * ✅ correction
- * ✅ progression
- * ✅ chronomètre
- * ✅ fin du quiz
- * ✅ préparation de la session
- * ✅ erreurs à revoir
- *
- * ------------------------------------------------------------
- * 🚫 À NE PAS FAIRE :
- *
- * ❌ Pas de code Compose.
- * ❌ Pas d'accès direct aux DAO.
- * ❌ Pas d'accès direct à Room.
- * ❌ Pas de navigation UI.
- *
- * Pour les données :
- *
- * QuizViewModel → RevisionRepository
- *
- * et jamais :
- *
- * QuizViewModel → QuestionDao
- *
- * ------------------------------------------------------------
- * ⚠️ CAS PARTICULIERS :
- *
- * Prévoir les situations suivantes :
- *
- * - aucune question disponible ;
- * - moins de questions disponibles que demandé ;
- * - réponse vide/non sélectionnée ;
- * - temps écoulé ;
- * - erreur lors du chargement ;
- * - quiz terminé ;
- * - tentative de répondre deux fois.
- *
- * ------------------------------------------------------------
- * 🧪 TESTS À PRÉVOIR :
- *
- * Vérifier :
- *
- * - chargement des questions ;
- * - nombre de questions ;
- * - sélection d'une réponse ;
- * - bonne réponse ;
- * - mauvaise réponse ;
- * - calcul du score ;
- * - progression ;
- * - chronomètre ;
- * - temps écoulé ;
- * - question suivante ;
- * - fin du quiz ;
- * - enregistrement de la session ;
- * - identification des erreurs.
- *
- * ============================================================
- */
+import com.example.karan.data.repository.RevisionRepository
 
-// TODO : créer l'UI State du quiz
-// TODO : créer QuizViewModel
-// TODO : injecter RevisionRepository
-// TODO : charger les questions du quiz
-// TODO : gérer la question actuelle
-// TODO : gérer la réponse sélectionnée
-// TODO : vérifier la réponse
-// TODO : gérer la correction et l'explication
-// TODO : calculer le score
-// TODO : gérer la progression
-// TODO : créer le chronomètre
-// TODO : gérer le temps écoulé
-// TODO : identifier les erreurs à revoir
-// TODO : terminer le quiz
-// TODO : préparer et enregistrer SessionQuiz
-// TODO : gérer les états loading / success / error / empty
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.example.karan.models.Question
+import com.example.karan.models.SessionQuiz
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+/**
+ * État du quiz exposé au QuizScreen.
+ */
+sealed interface QuizUiState {
+
+    object Loading : QuizUiState
+
+    /** Aucune question disponible pour cet examen / cette matière. */
+    object Empty : QuizUiState
+
+    data class Error(val message: String) : QuizUiState
+
+    /** Quiz en cours : une question à la fois. */
+    data class Ready(
+        val question: Question,
+        val indexActuel: Int,
+        val totalQuestions: Int,
+        val reponseSelectionnee: String?,   // "A", "B", "C" ou "D" ; null si pas encore répondu
+        val correctionAffichee: Boolean,    // true dès qu'une réponse est choisie
+        val estCorrecte: Boolean?,          // null tant qu'il n'y a pas de réponse
+        val tempsRestantSecondes: Int,
+        val score: Int
+    ) : QuizUiState {
+        val estDerniereQuestion: Boolean get() = indexActuel == totalQuestions - 1
+        val progression: Float get() = (indexActuel + 1).toFloat() / totalQuestions
+    }
+
+    /** Quiz terminé : infos pour l'écran Résultat et pour SessionQuiz. */
+    data class Finished(
+        val score: Int,
+        val totalQuestions: Int,
+        val pourcentage: Int,
+        val dureeSecondes: Int,
+        val tempsEcoule: Boolean,
+        val questionsErronees: List<Question>,       // erreurs à revoir
+        val reponsesDonnees: Map<Long, String>,      // id de la question -> lettre choisie
+        val sessionEnregistree: Boolean = false
+    ) : QuizUiState
+}
+
+class QuizViewModel(
+    private val repository: RevisionRepository,
+    private val examen: String,              // "BAC" ou "BEPC"
+    private val matiereId: Long,
+    private val nombreQuestions: Int,
+    private val dureeTotaleSecondes: Int = nombreQuestions * 30
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow<QuizUiState>(QuizUiState.Loading)
+    val uiState: StateFlow<QuizUiState> = _uiState.asStateFlow()
+
+    // --- Données internes du quiz en cours ---
+    private var questions: List<Question> = emptyList()
+    private var indexActuel = 0
+    private var reponseSelectionnee: String? = null
+    private var score = 0
+    private var tempsRestant = dureeTotaleSecondes
+    private var termine = false
+    private val erreurs = mutableListOf<Question>()
+    private val reponsesDonnees = mutableMapOf<Long, String>()
+    private var chronoJob: Job? = null
+
+    init {
+        require(nombreQuestions > 0) { "nombreQuestions doit être > 0" }
+        chargerQuiz()
+    }
+
+    // ------------------------------------------------------------
+    // CHARGEMENT
+    // ------------------------------------------------------------
+    fun chargerQuiz() {
+        chronoJob?.cancel()
+        _uiState.value = QuizUiState.Loading
+        viewModelScope.launch {
+            try {
+                val chargees = repository
+                    .getQuestions(examen, matiereId, nombreQuestions)
+                    .take(nombreQuestions) // gère aussi "moins de questions que demandé"
+
+                if (chargees.isEmpty()) {
+                    _uiState.value = QuizUiState.Empty
+                    return@launch
+                }
+                reinitialiser(chargees)
+                demarrerChrono()
+                publierEtat()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.value = QuizUiState.Error(
+                    e.message ?: "Impossible de charger les questions"
+                )
+            }
+        }
+    }
+
+    private fun reinitialiser(nouvellesQuestions: List<Question>) {
+        questions = nouvellesQuestions
+        indexActuel = 0
+        reponseSelectionnee = null
+        score = 0
+        tempsRestant = dureeTotaleSecondes
+        termine = false
+        erreurs.clear()
+        reponsesDonnees.clear()
+    }
+
+    // ------------------------------------------------------------
+    // RÉPONSES
+    // ------------------------------------------------------------
+    fun selectionnerReponse(choix: String) {
+        if (termine || questions.isEmpty()) return
+        if (choix.isBlank()) return                    // réponse vide
+        if (reponseSelectionnee != null) return        // déjà répondu : on bloque
+
+        val question = questions[indexActuel]
+        reponseSelectionnee = choix
+        reponsesDonnees[question.id] = choix
+
+        if (estBonneReponse(question, choix)) {
+            score++
+        } else {
+            erreurs.add(question)                      // erreur à revoir
+        }
+        publierEtat()
+    }
+
+    private fun estBonneReponse(question: Question, choix: String): Boolean =
+        choix.trim().equals(question.reponseCorrecte.trim(), ignoreCase = true)
+
+    // ------------------------------------------------------------
+    // NAVIGATION DANS LE QUIZ
+    // ------------------------------------------------------------
+    fun questionSuivante() {
+        if (termine || questions.isEmpty()) return
+        if (reponseSelectionnee == null) return        // il faut répondre avant de continuer
+
+        if (indexActuel >= questions.size - 1) {
+            terminerQuiz(tempsEcoule = false)
+        } else {
+            indexActuel++
+            reponseSelectionnee = null
+            publierEtat()
+        }
+    }
+
+    // ------------------------------------------------------------
+    // CHRONOMÈTRE
+    // ------------------------------------------------------------
+    private fun demarrerChrono() {
+        chronoJob?.cancel()
+        chronoJob = viewModelScope.launch {
+            while (tempsRestant > 0) {
+                delay(1_000)
+                tempsRestant--
+                publierEtat()
+            }
+            terminerQuiz(tempsEcoule = true)
+        }
+    }
+
+    // ------------------------------------------------------------
+    // FIN DU QUIZ
+    // ------------------------------------------------------------
+    private fun terminerQuiz(tempsEcoule: Boolean) {
+        if (termine) return
+        termine = true
+        chronoJob?.cancel()
+
+        val total = questions.size
+        val duree = dureeTotaleSecondes - tempsRestant
+        val pourcentage = if (total == 0) 0 else (score * 100) / total
+
+        val resultat = QuizUiState.Finished(
+            score = score,
+            totalQuestions = total,
+            pourcentage = pourcentage,
+            dureeSecondes = duree,
+            tempsEcoule = tempsEcoule,
+            questionsErronees = erreurs.toList(),
+            reponsesDonnees = reponsesDonnees.toMap()
+        )
+        _uiState.value = resultat
+
+        enregistrerSession(resultat)
+    }
+
+    private fun enregistrerSession(resultat: QuizUiState.Finished) {
+        viewModelScope.launch {
+            try {
+                repository.saveSession(
+                    SessionQuiz(
+                        matiereId = matiereId,
+                        date = System.currentTimeMillis(),
+                        score = resultat.score,
+                        total = resultat.totalQuestions,
+                        dureeSecondes = resultat.dureeSecondes
+                    )
+                )
+                _uiState.value = resultat.copy(sessionEnregistree = true)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // La session n'a pas pu être sauvegardée ; l'écran Résultat reste affiché.
+                _uiState.value = resultat.copy(sessionEnregistree = false)
+            }
+        }
+    }
+
+    // ------------------------------------------------------------
+    // ÉTAT
+    // ------------------------------------------------------------
+    private fun publierEtat() {
+        if (termine || questions.isEmpty()) return
+        val question = questions[indexActuel]
+        val choix = reponseSelectionnee
+        _uiState.value = QuizUiState.Ready(
+            question = question,
+            indexActuel = indexActuel,
+            totalQuestions = questions.size,
+            reponseSelectionnee = choix,
+            correctionAffichee = choix != null,
+            estCorrecte = choix?.let { estBonneReponse(question, it) },
+            tempsRestantSecondes = tempsRestant,
+            score = score
+        )
+    }
+
+    // ------------------------------------------------------------
+    // FACTORY (pour créer le ViewModel avec ses paramètres)
+    // ------------------------------------------------------------
+    class Factory(
+        private val repository: RevisionRepository,
+        private val examen: String,
+        private val matiereId: Long,
+        private val nombreQuestions: Int,
+        private val dureeTotaleSecondes: Int = nombreQuestions * 30
+    ) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T =
+            QuizViewModel(
+                repository, examen, matiereId, nombreQuestions, dureeTotaleSecondes
+            ) as T
+    }
+}

@@ -136,6 +136,7 @@ fun KaranAppNavHost() {
                 uiState = AccueilUiState(
                     studentName = "N'famory",
                     selectedExamen = selectedExamen,
+                    matieres = sampleMatieres,
                     subjectProgressList = sampleProgressList,
                     lastRevisionTitle = "Mathématiques - Chapitre 3",
                     countErrorsToReview = 5,
@@ -146,6 +147,13 @@ fun KaranAppNavHost() {
                 },
                 onOpenMatieres = {
                     currentScreen = ScreenDestination.MATIERES
+                },
+                onMatiereClick = { matiere ->
+                    selectedMatiereNom = matiere.nom
+                    selectedQuestionCount = 10
+                    selectedAnswer = null
+                    isAnswerSubmitted = false
+                    currentScreen = ScreenDestination.QUIZ
                 },
                 onReprendreRevision = {
                     selectedMatiereNom = "Mathématiques"

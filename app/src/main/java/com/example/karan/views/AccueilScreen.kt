@@ -1,11 +1,13 @@
 package com.example.karan.views
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -57,6 +59,14 @@ data class SubjectProgressItem(
 data class AccueilUiState(
     val studentName: String = "Groupe-10",
     val selectedExamen: ExamenType = ExamenType.BAC,
+    val matieres: List<MatiereUiItem> = listOf(
+        MatiereUiItem("1", "Mathématiques", 12, 0xFF0066FF, "📐"),
+        MatiereUiItem("2", "Français", 10, 0xFFEF4444, "📕"),
+        MatiereUiItem("3", "Physique-Chimie", 8, 0xFF8B5CF6, "🧪"),
+        MatiereUiItem("4", "SVT", 7, 0xFF10B981, "🌿"),
+        MatiereUiItem("5", "Histoire-Géographie", 6, 0xFFF59E0B, "🌐"),
+        MatiereUiItem("6", "Philosophie", 5, 0xFF06B6D4, "🧠")
+    ),
     val subjectProgressList: List<SubjectProgressItem> = listOf(
         SubjectProgressItem("1", "Mathématiques", 0.78f, "78%", 0xFF0066FF, "📐"),
         SubjectProgressItem("2", "Français", 0.65f, "65%", 0xFFEF4444, "📕"),
@@ -76,6 +86,7 @@ fun AccueilScreen(
     uiState: AccueilUiState = AccueilUiState(),
     onExamenSelected: (ExamenType) -> Unit = {},
     onOpenMatieres: () -> Unit = {},
+    onMatiereClick: (MatiereUiItem) -> Unit = {},
     onReprendreRevision: () -> Unit = {},
     onRevoirErreurs: () -> Unit = {},
     bottomBar: @Composable () -> Unit = {}
@@ -128,6 +139,12 @@ fun AccueilScreen(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                MatieresAccueilSection(
+                    matieres = uiState.matieres,
+                    onOpenMatieres = onOpenMatieres,
+                    onMatiereClick = onMatiereClick
+                )
+
                 ProgressionSection(
                     progressList = uiState.subjectProgressList,
                     onOpenMatieres = onOpenMatieres
@@ -471,6 +488,120 @@ private fun ErreursCard(count: Int, subjectsText: String, onClick: () -> Unit) {
                 contentDescription = null,
                 tint = Color(0xFFE11D48)
             )
+        }
+    }
+}
+
+@Composable
+private fun MatieresAccueilSection(
+    matieres: List<MatiereUiItem>,
+    onOpenMatieres: () -> Unit,
+    onMatiereClick: (MatiereUiItem) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(text = "📚", fontSize = 18.sp)
+                    Text(
+                        text = "Matières de révision",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A)
+                    )
+                }
+                Text(
+                    text = "Voir tout >",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF0066FF),
+                    modifier = Modifier.clickable { onOpenMatieres() }
+                )
+            }
+
+            val chunkedMatieres = matieres.chunked(2)
+            chunkedMatieres.forEach { rowMatieres ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    rowMatieres.forEach { matiere ->
+                        MatiereGridCard(
+                            matiere = matiere,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onMatiereClick(matiere) }
+                        )
+                    }
+                    if (rowMatieres.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MatiereGridCard(
+    matiere: MatiereUiItem,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier.clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFFF8FAFC),
+        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(
+                        color = Color(matiere.colorHex).copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(10.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = matiere.iconSymbol, fontSize = 18.sp)
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = matiere.nom,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A),
+                    maxLines = 1
+                )
+                Text(
+                    text = "${matiere.nombreChapitres} chapitres",
+                    fontSize = 11.sp,
+                    color = Color(0xFF64748B)
+                )
+            }
         }
     }
 }

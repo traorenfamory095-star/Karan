@@ -112,17 +112,8 @@ package com.example.karan.viewmodels
  * ------------------------------------------------------------
  * 🧠 RESPONSABILITÉ :
  *
- * ResultatViewModel contient la logique nécessaire à la
- * préparation des données du résultat.
- *
- * Il peut :
- *
- * ✅ récupérer une session ;
- * ✅ préparer le score ;
- * ✅ préparer la correction ;
- * ✅ récupérer la progression ;
- * ✅ récupérer l'historique nécessaire ;
- * ✅ gérer les erreurs.
+ * ResultatViewModel contains the logic necessary to prepare
+ * result data.
  *
  * ------------------------------------------------------------
  * 🚫 À NE PAS FAIRE :

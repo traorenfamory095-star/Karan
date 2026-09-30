@@ -1,3 +1,5 @@
+package com.example.karan.data.repository
+
 /*
  * ============================================================
  * REVISION REPOSITORY — INTERFACE

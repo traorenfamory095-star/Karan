@@ -1,156 +1,227 @@
 package com.example.karan.viewmodels
 
-/*
- * ============================================================
- * MATIERES VIEWMODEL — INSTRUCTIONS DE TRAVAIL
- * ============================================================
- *
- * 👤 Responsable : Mamadou Alpha Diallo
- *
- * 🎯 OBJECTIF :
- * MatieresViewModel contient la logique nécessaire à
- * MatieresScreen.
- *
- * Il récupère les matières et les fiches depuis le Repository
- * et expose leur état à l'interface grâce à StateFlow.
- *
- * ------------------------------------------------------------
- * 🔄 FLUX :
- *
- * MatieresScreen
- *       ↓
- * MatieresViewModel
- *       ↓
- * RevisionRepository
- *       ↓
- * DAO
- *       ↓
- * Room
- *
- * ------------------------------------------------------------
- * 📚 DONNÉES À GÉRER :
- *
- * Le ViewModel devra notamment gérer :
- *
- * - l'examen sélectionné : BAC ou BEPC ;
- * - la liste des matières ;
- * - la matière sélectionnée ;
- * - les fiches associées à une matière ;
- * - le nombre de questions choisi ;
- * - l'état de chargement ;
- * - les éventuelles erreurs.
- *
- * ------------------------------------------------------------
- * 🔢 NOMBRE DE QUESTIONS :
- *
- * L'élève doit pouvoir choisir le nombre de questions avant
- * de commencer le quiz.
- *
- * Exemple :
- *
- * 5 questions
- * 10 questions
- * 20 questions
- *
- * Le ViewModel devra conserver ce choix afin qu'il puisse
- * être transmis au QuizScreen via la navigation.
- *
- * ------------------------------------------------------------
- * 📖 FICHES :
- *
- * Le ViewModel pourra demander au Repository les fiches
- * correspondant à la matière sélectionnée.
- *
- * Les fiches sont stockées localement dans Room afin de
- * fonctionner hors connexion.
- *
- * ------------------------------------------------------------
- * 🌊 STATEFLOW :
- *
- * Utiliser StateFlow pour exposer un état unique de l'écran.
- *
- * L'état pourra contenir notamment :
- *
- * - loading ;
- * - liste des matières ;
- * - matière sélectionnée ;
- * - liste des fiches ;
- * - nombre de questions ;
- * - erreur éventuelle.
- *
- * ------------------------------------------------------------
- * 🧠 LOGIQUE MÉTIER :
- *
- * Le ViewModel peut :
- *
- * - filtrer les matières selon BAC / BEPC ;
- * - sélectionner une matière ;
- * - sélectionner le nombre de questions ;
- * - demander les fiches d'une matière ;
- * - préparer les informations nécessaires au lancement
- *   du quiz.
- *
- * ------------------------------------------------------------
- * ❌ À NE PAS FAIRE :
- *
- * ❌ Ne pas accéder directement aux DAO.
- * ❌ Ne pas accéder directement à Room.
- * ❌ Ne pas écrire de code Compose.
- * ❌ Ne pas gérer la navigation directement.
- * ❌ Ne pas afficher de Toast depuis le ViewModel.
- *
- * Le ViewModel dépend uniquement de :
- *
- * RevisionRepository
- *
- * ------------------------------------------------------------
- * ⚠️ VALIDATION :
- *
- * Vérifier que :
- *
- * - une matière est bien sélectionnée avant de commencer ;
- * - le nombre de questions est valide ;
- * - il existe suffisamment de questions disponibles.
- *
- * Les messages d'erreur devront être exposés dans l'état
- * afin que le Screen puisse les afficher.
- *
- * ------------------------------------------------------------
- * 📭 ÉTAT VIDE :
- *
- * Si aucune matière n'est disponible :
- *
- * "Aucune matière disponible pour le moment."
- *
- * Si aucune fiche n'est disponible :
- *
- * "Aucune fiche disponible pour le moment."
- *
- * ------------------------------------------------------------
- * 🧪 TESTS À PRÉVOIR :
- *
- * Vérifier :
- *
- * - filtrage BAC / BEPC ;
- * - récupération des matières ;
- * - sélection d'une matière ;
- * - récupération des fiches ;
- * - sélection du nombre de questions ;
- * - validation du nombre de questions ;
- * - gestion d'une liste vide ;
- * - gestion des erreurs ;
- * - mise à jour du StateFlow.
- *
- * ============================================================
- */
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.example.karan.data.repository.RevisionRepository
+import com.example.karan.models.Fiche
+import com.example.karan.models.Matiere
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
-// TODO : créer l'UI State de l'écran des matières
-// TODO : créer MatieresViewModel
-// TODO : injecter RevisionRepository
-// TODO : créer le StateFlow de l'écran
-// TODO : charger les matières selon l'examen
-// TODO : gérer la sélection d'une matière
-// TODO : charger les fiches de la matière
-// TODO : gérer le choix du nombre de questions
-// TODO : valider les paramètres avant le lancement du quiz
-// TODO : gérer les états loading / success / error / empty
+const val MSG_AUCUNE_MATIERE = "Aucune matière disponible pour le moment."
+const val MSG_AUCUNE_FICHE = "Aucune fiche disponible pour le moment."
+
+/** Choix possibles pour le nombre de questions. */
+val OPTIONS_NOMBRE_QUESTIONS = listOf(5, 10, 20)
+
+/** Informations nécessaires pour lancer le quiz (transmises à QuizScreen par la navigation). */
+data class ParametresQuiz(
+    val examen: String,
+    val matiereId: Long,
+    val nombreQuestions: Int
+)
+
+/** État unique de MatieresScreen. */
+data class MatieresUiState(
+    val chargement: Boolean = true,
+    val examen: String = "BAC",
+    val matieres: List<Matiere> = emptyList(),
+    val matiereSelectionnee: Matiere? = null,
+    val chargementFiches: Boolean = false,
+    val fiches: List<Fiche> = emptyList(),
+    val nombreQuestions: Int = 10,
+    val erreur: String? = null,
+    val messageValidation: String? = null,
+    /** Non null quand tout est valide : l'écran navigue vers le quiz puis appelle consommerLancement(). */
+    val parametresQuiz: ParametresQuiz? = null
+) {
+    val aucuneMatiere: Boolean
+        get() = !chargement && erreur == null && matieres.isEmpty()
+
+    val aucuneFiche: Boolean
+        get() = matiereSelectionnee != null && !chargementFiches && erreur == null && fiches.isEmpty()
+
+    val messageMatieresVides: String? get() = if (aucuneMatiere) MSG_AUCUNE_MATIERE else null
+    val messageFichesVides: String? get() = if (aucuneFiche) MSG_AUCUNE_FICHE else null
+}
+
+class MatieresViewModel(
+    private val repository: RevisionRepository,
+    examenInitial: String = "BAC"
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(MatieresUiState(examen = examenInitial))
+    val uiState: StateFlow<MatieresUiState> = _uiState.asStateFlow()
+
+    private var matieresJob: Job? = null
+    private var fichesJob: Job? = null
+
+    init {
+        chargerMatieres()
+    }
+
+    // ------------------------------------------------------------
+    // EXAMEN ET MATIÈRES
+    // ------------------------------------------------------------
+    fun selectionnerExamen(examen: String) {
+        if (examen == _uiState.value.examen) return
+        fichesJob?.cancel()
+        _uiState.update {
+            it.copy(
+                examen = examen,
+                matiereSelectionnee = null,
+                fiches = emptyList(),
+                chargementFiches = false,
+                messageValidation = null,
+                parametresQuiz = null
+            )
+        }
+        chargerMatieres()
+    }
+
+    fun chargerMatieres() {
+        matieresJob?.cancel()
+        _uiState.update { it.copy(chargement = true, erreur = null, matieres = emptyList()) }
+        val examen = _uiState.value.examen
+        matieresJob = viewModelScope.launch {
+            try {
+                val liste = repository.getMatieres(examen)
+                _uiState.update { it.copy(chargement = false, matieres = liste) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        chargement = false,
+                        erreur = e.message ?: "Impossible de charger les matières"
+                    )
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------
+    // MATIÈRE ET FICHES
+    // ------------------------------------------------------------
+    fun selectionnerMatiere(matiere: Matiere) {
+        fichesJob?.cancel()
+        _uiState.update {
+            it.copy(
+                matiereSelectionnee = matiere,
+                fiches = emptyList(),
+                chargementFiches = true,
+                erreur = null,
+                messageValidation = null,
+                parametresQuiz = null
+            )
+        }
+        fichesJob = viewModelScope.launch {
+            try {
+                val liste = repository.getFiches(matiere.id)
+                _uiState.update { it.copy(chargementFiches = false, fiches = liste) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        chargementFiches = false,
+                        erreur = e.message ?: "Impossible de charger les fiches"
+                    )
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------
+    // NOMBRE DE QUESTIONS
+    // ------------------------------------------------------------
+    fun selectionnerNombreQuestions(nombre: Int) {
+        if (nombre !in OPTIONS_NOMBRE_QUESTIONS) {
+            _uiState.update { it.copy(messageValidation = "Nombre de questions invalide.") }
+            return
+        }
+        _uiState.update {
+            it.copy(nombreQuestions = nombre, messageValidation = null, parametresQuiz = null)
+        }
+    }
+
+    // ------------------------------------------------------------
+    // LANCEMENT DU QUIZ (validation)
+    // ------------------------------------------------------------
+    fun preparerQuiz() {
+        val etat = _uiState.value
+        val matiere = etat.matiereSelectionnee
+
+        if (matiere == null) {
+            _uiState.update {
+                it.copy(messageValidation = "Veuillez choisir une matière avant de commencer.")
+            }
+            return
+        }
+        if (etat.nombreQuestions !in OPTIONS_NOMBRE_QUESTIONS) {
+            _uiState.update { it.copy(messageValidation = "Nombre de questions invalide.") }
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val disponibles = repository.countQuestions(etat.examen, matiere.id)
+                when {
+                    disponibles <= 0 -> _uiState.update {
+                        it.copy(
+                            messageValidation =
+                                "Aucune question disponible pour cette matière pour le moment."
+                        )
+                    }
+                    disponibles < etat.nombreQuestions -> _uiState.update {
+                        it.copy(
+                            messageValidation =
+                                "Seulement $disponibles questions disponibles. " +
+                                        "Choisissez un nombre plus petit."
+                        )
+                    }
+                    else -> _uiState.update {
+                        it.copy(
+                            messageValidation = null,
+                            parametresQuiz = ParametresQuiz(
+                                examen = etat.examen,
+                                matiereId = matiere.id,
+                                nombreQuestions = etat.nombreQuestions
+                            )
+                        )
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(messageValidation = e.message ?: "Impossible de vérifier les questions")
+                }
+            }
+        }
+    }
+
+    /** À appeler par l'écran une fois la navigation vers le quiz effectuée. */
+    fun consommerLancement() {
+        _uiState.update { it.copy(parametresQuiz = null) }
+    }
+
+    fun effacerMessage() {
+        _uiState.update { it.copy(messageValidation = null) }
+    }
+
+    class Factory(
+        private val repository: RevisionRepository,
+        private val examenInitial: String = "BAC"
+    ) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T =
+            MatieresViewModel(repository, examenInitial) as T
+    }
+}

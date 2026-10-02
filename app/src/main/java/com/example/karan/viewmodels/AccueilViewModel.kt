@@ -1,127 +1,147 @@
 package com.example.karan.viewmodels
 
-/*
- * ============================================================
- * ACCUEIL VIEWMODEL — INSTRUCTIONS DE TRAVAIL
- * ============================================================
- *
- * 👤 Responsable : Mamadou Alpha Diallo
- *
- * 🎯 OBJECTIF :
- * AccueilViewModel contient la logique nécessaire à
- * AccueilScreen.
- *
- * Il récupère les données depuis le Repository et expose
- * un état observable à l'interface avec StateFlow.
- *
- * ------------------------------------------------------------
- * 🔄 FLUX :
- *
- * AccueilScreen
- *      ↓
- * AccueilViewModel
- *      ↓
- * RevisionRepository
- *      ↓
- * DAO
- *      ↓
- * Room
- *
- * Le Screen ne communique jamais directement avec Room.
- *
- * ------------------------------------------------------------
- * 📊 DONNÉES À GÉRER :
- *
- * Le ViewModel devra notamment pouvoir fournir :
- *
- * - l'examen sélectionné : BAC ou BEPC ;
- * - la progression générale ;
- * - les dernières sessions ;
- * - la dernière matière travaillée ;
- * - le nombre d'erreurs à revoir ;
- * - l'état de chargement ;
- * - les éventuelles erreurs.
- *
- * ------------------------------------------------------------
- * 🌊 STATEFLOW :
- *
- * Utiliser StateFlow pour exposer l'état de l'écran.
- *
- * Exemple de principe :
- *
- * UI State
- *   ├── loading
- *   ├── examen sélectionné
- *   ├── progression
- *   ├── dernière session
- *   ├── erreurs
- *   └── erreur éventuelle
- *
- * Le Screen observe cet état et se redessine lorsque les
- * données changent.
- *
- * ------------------------------------------------------------
- * 🧠 LOGIQUE MÉTIER :
- *
- * Le ViewModel peut :
- *
- * - sélectionner BAC ou BEPC ;
- * - demander les données au Repository ;
- * - calculer une progression à partir des sessions ;
- * - déterminer les informations à afficher sur le dashboard ;
- * - gérer les états de chargement et d'erreur.
- *
- * ------------------------------------------------------------
- * ❌ À NE PAS FAIRE :
- *
- * ❌ Ne pas accéder directement aux DAO.
- * ❌ Ne pas accéder directement à Room.
- * ❌ Ne pas écrire de code Compose.
- * ❌ Ne pas gérer la navigation directement.
- *
- * Le ViewModel dépend uniquement de l'interface :
- *
- * RevisionRepository
- *
- * et non de :
- *
- * RevisionRepositoryImpl
- *
- * ------------------------------------------------------------
- * ⚠️ ÉTATS À PRÉVOIR :
- *
- * 1. Chargement
- * 2. Données disponibles
- * 3. Aucune session
- * 4. Aucune erreur à revoir
- * 5. Erreur de récupération des données
- *
- * Exemple d'état vide :
- *
- * "Aucune donnée pour le moment"
- *
- * ------------------------------------------------------------
- * 🧪 TESTS À PRÉVOIR :
- *
- * Vérifier :
- *
- * - sélection BAC ;
- * - sélection BEPC ;
- * - récupération des sessions ;
- * - calcul de la progression ;
- * - affichage de l'état vide ;
- * - gestion des erreurs ;
- * - mise à jour du StateFlow.
- *
- * ============================================================
- */
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.example.karan.data.repository.RevisionRepository
+import com.example.karan.models.SessionQuiz
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
-// TODO : créer l'UI State de l'écran d'accueil
-// TODO : créer AccueilViewModel
-// TODO : injecter RevisionRepository
-// TODO : créer le StateFlow de l'écran
-// TODO : gérer la sélection BAC / BEPC
-// TODO : récupérer les dernières sessions
-// TODO : récupérer les informations de progression
-// TODO : gérer les erreurs à revoir
-// TODO : gérer les états loading / success / error / empty
+const val MSG_AUCUNE_DONNEE = "Aucune donnée pour le moment"
+const val MSG_AUCUNE_ERREUR_A_REVOIR = "Aucune erreur à revoir pour le moment."
+
+private const val LIMITE_SESSIONS_CHARGEES = 50
+private const val NOMBRE_DERNIERES_SESSIONS = 5
+
+/** Une session affichée dans la liste « dernières sessions ». */
+data class SessionResume(
+    val matiere: String,
+    val score: Int,
+    val total: Int,
+    val pourcentage: Int,
+    val date: Long
+)
+
+/** Progression générale de l'élève pour l'examen sélectionné. */
+data class ProgressionGenerale(
+    val nombreQuiz: Int,
+    val reussiteMoyenne: Int        // pourcentage moyen sur tous les quiz
+)
+
+/** État unique de AccueilScreen. */
+data class AccueilUiState(
+    val chargement: Boolean = true,
+    val examen: String = "BAC",
+    val progression: ProgressionGenerale = ProgressionGenerale(0, 0),
+    val dernieresSessions: List<SessionResume> = emptyList(),
+    val derniereMatiere: String? = null,
+    val nombreErreursARevoir: Int = 0,
+    val erreur: String? = null
+) {
+    val aucuneSession: Boolean
+        get() = !chargement && erreur == null && dernieresSessions.isEmpty()
+
+    val aucuneErreurARevoir: Boolean
+        get() = !chargement && erreur == null && nombreErreursARevoir == 0
+
+    val messageVide: String? get() = if (aucuneSession) MSG_AUCUNE_DONNEE else null
+    val messageAucuneErreur: String? get() = if (aucuneErreurARevoir) MSG_AUCUNE_ERREUR_A_REVOIR else null
+}
+
+class AccueilViewModel(
+    private val repository: RevisionRepository,
+    examenInitial: String = "BAC"
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(AccueilUiState(examen = examenInitial))
+    val uiState: StateFlow<AccueilUiState> = _uiState.asStateFlow()
+
+    private var chargementJob: Job? = null
+
+    init {
+        charger()
+    }
+
+    fun selectionnerExamen(examen: String) {
+        if (examen == _uiState.value.examen) return
+        _uiState.update { it.copy(examen = examen) }
+        charger()
+    }
+
+    fun charger() {
+        chargementJob?.cancel()
+        _uiState.update { it.copy(chargement = true, erreur = null) }
+        val examen = _uiState.value.examen
+
+        chargementJob = viewModelScope.launch {
+            try {
+                // Les sessions ne connaissent que la matière : on passe par les matières de l'examen.
+                val matieres = repository.getMatieres(examen)
+                val nomsParId = matieres.associate { it.id to it.nom }
+
+                val sessions = repository.getDernieresSessions(LIMITE_SESSIONS_CHARGEES)
+                    .filter { it.matiereId in nomsParId }
+                    .sortedByDescending { it.date }
+
+                val erreursARevoir = repository.countErreursARevoir(examen)
+
+                _uiState.update {
+                    it.copy(
+                        chargement = false,
+                        progression = calculerProgression(sessions),
+                        dernieresSessions = sessions
+                            .take(NOMBRE_DERNIERES_SESSIONS)
+                            .map { s ->
+                                SessionResume(
+                                    matiere = nomsParId[s.matiereId] ?: "Matière inconnue",
+                                    score = s.score,
+                                    total = s.total,
+                                    pourcentage = pourcentage(s.score, s.total),
+                                    date = s.date
+                                )
+                            },
+                        derniereMatiere = sessions.firstOrNull()?.let { s -> nomsParId[s.matiereId] },
+                        nombreErreursARevoir = erreursARevoir
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        chargement = false,
+                        erreur = e.message ?: "Impossible de charger les données"
+                    )
+                }
+            }
+        }
+    }
+
+    private fun pourcentage(score: Int, total: Int): Int =
+        if (total <= 0) 0 else (score * 100) / total
+
+    private fun calculerProgression(sessions: List<SessionQuiz>): ProgressionGenerale {
+        val pourcentages = sessions
+            .filter { it.total > 0 }
+            .map { pourcentage(it.score, it.total) }
+        return ProgressionGenerale(
+            nombreQuiz = sessions.size,
+            reussiteMoyenne = if (pourcentages.isEmpty()) 0 else pourcentages.average().toInt()
+        )
+    }
+
+    class Factory(
+        private val repository: RevisionRepository,
+        private val examenInitial: String = "BAC"
+    ) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T =
+            AccueilViewModel(repository, examenInitial) as T
+    }
+}

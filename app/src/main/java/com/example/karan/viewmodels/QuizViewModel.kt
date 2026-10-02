@@ -217,7 +217,7 @@ class QuizViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // La session n'a pas pou être sauvegardée ; l'écran Résultat reste affiché.
+                // La session n'a pas pu être sauvegardée ; l'écran Résultat reste affiché.
                 _uiState.value = resultat.copy(sessionEnregistree = false)
             }
         }

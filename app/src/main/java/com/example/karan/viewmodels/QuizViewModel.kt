@@ -1,10 +1,9 @@
 package com.example.karan.viewmodels
 
-import com.example.karan.data.repository.RevisionRepository
-
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.karan.data.repository.RevisionRepository
 import com.example.karan.models.Question
 import com.example.karan.models.SessionQuiz
 import kotlinx.coroutines.CancellationException
@@ -218,7 +217,7 @@ class QuizViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // La session n'a pas pu être sauvegardée ; l'écran Résultat reste affiché.
+                // La session n'a pas pou être sauvegardée ; l'écran Résultat reste affiché.
                 _uiState.value = resultat.copy(sessionEnregistree = false)
             }
         }

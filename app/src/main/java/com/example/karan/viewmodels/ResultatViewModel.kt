@@ -99,7 +99,7 @@ class ResultatViewModel(
                     mauvaisesReponses = (session.total - session.score).coerceAtLeast(0),
                     pourcentage = pourcentage(session.score, session.total),
                     matiere = matiere?.nom ?: "Matière inconnue",
-                    examen = matiere?.examen ?: "",
+                    examen = matiere?.examen?.ifBlank { session.examen } ?: session.examen,
                     dureeSecondes = session.dureeSecondes,
                     correction = correction,
                     progression = calculerProgression(sessionsMatiere)

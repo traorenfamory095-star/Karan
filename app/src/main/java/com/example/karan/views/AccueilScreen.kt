@@ -132,7 +132,7 @@ private fun AccueilTopBar() {
                 }
 
                 Text(
-                    text = "Révision BAC / BEPC",
+                    text = "Karan",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -186,7 +186,7 @@ private fun AccueilContent(
         ) {
 
             GreetingHeader(
-                studentName = "Groupe-10"
+                studentName = "ODC"
             )
 
             ExamenSelectionCards(

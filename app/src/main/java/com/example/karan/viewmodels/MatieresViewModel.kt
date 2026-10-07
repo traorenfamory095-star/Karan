@@ -21,7 +21,7 @@ const val MSG_AUCUNE_FICHE =
     "Aucune fiche disponible pour le moment."
 
 private val OPTIONS_NOMBRE_QUESTIONS =
-    listOf(1, 2, 3)
+    listOf(5, 10, 20)
 
 /**
  * Paramètres nécessaires pour lancer un quiz.
@@ -45,7 +45,7 @@ data class MatieresUiState(
     val matiereSelectionnee: Matiere? = null,
     val chargementFiches: Boolean = false,
     val fiches: List<Fiche> = emptyList(),
-    val nombreQuestions: Int = 2,
+    val nombreQuestions: Int = 10,
     val erreur: String? = null,
     val messageValidation: String? = null,
 

@@ -1,47 +1,39 @@
 package com.example.karan.navigation
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.example.karan.data.repository.RevisionRepository
+import com.example.karan.viewmodels.AccueilViewModel
+import com.example.karan.viewmodels.MatieresViewModel
+import com.example.karan.viewmodels.QuizUiState
+import com.example.karan.viewmodels.QuizViewModel
+import com.example.karan.viewmodels.ResultatViewModel
+import com.example.karan.viewmodels.toCorrectionItems
+import com.example.karan.views.AccueilScreen
+import com.example.karan.views.MatieresScreen
+import com.example.karan.views.QuizScreen
+import com.example.karan.views.ResultatScreen
+
 /*
  * ============================================================
- * APP NAVIGATION — INSTRUCTIONS DE TRAVAIL
+ * APP NAVIGATION
  * ============================================================
  *
- * 👤 Responsable : N'famory Traore
+ * Responsable : N'famory Traore
  *
- * 🎯 OBJECTIF :
- * AppNavigation centralise la navigation entre les écrans
- * principaux de l'application Révision BAC / BEPC.
- *
- * L'objectif est de garder une navigation simple et adaptée
- * à la contrainte du MVP : maximum 3 à 4 écrans principaux.
- *
- * ------------------------------------------------------------
- * 📱 ÉCRANS PRINCIPAUX :
- *
- * 1. AccueilScreen
- *    → écran d'accueil / tableau de bord.
- *
- * 2. MatieresScreen
- *    → liste des matières et accès aux contenus.
- *
- * 3. QuizScreen
- *    → déroulement du quiz.
- *
- * 4. ResultatScreen
- *    → résultat et correction du quiz.
- *
- * Les fonctionnalités suivantes ne doivent pas créer
- * automatiquement de nouveaux écrans principaux :
- *
- * - progression ;
- * - historique ;
- * - erreurs à revoir ;
- * - fiches de révision.
- *
- * Elles doivent être intégrées intelligemment dans les
- * écrans existants afin de respecter la limite du MVP.
- *
- * ------------------------------------------------------------
- * 🔄 PARCOURS PRINCIPAL :
+ * Parcours principal :
  *
  * Accueil
  *    ↓
@@ -50,103 +42,273 @@ package com.example.karan.navigation
  * Quiz
  *    ↓
  * Résultat
- *    ↓
- * Accueil / Matières
  *
- * Exemple :
+ * La navigation coordonne uniquement :
  *
- * Accueil
- *   → choisir BAC
- *   → choisir une matière
- *   → choisir le nombre de questions
- *   → commencer
- *   → répondre aux questions
- *   → voir le résultat
- *
- * ------------------------------------------------------------
- * 🧭 NAVIGATION COMPOSE :
- *
- * Si le projet utilise Navigation Compose, cette classe devra
- * centraliser le NavHost et les différentes destinations.
- *
- * Les routes devront être clairement définies afin d'éviter
- * les chaînes de caractères dispersées dans les Screens.
- *
- * Exemple de principe :
- *
- * accueil
- * matieres
- * quiz
- * resultat
- *
- * ------------------------------------------------------------
- * 📦 PARAMÈTRES DE NAVIGATION :
- *
- * Certains écrans auront besoin d'informations pour savoir
- * quoi afficher.
- *
- * Exemple :
- *
- * QuizScreen
- *    ← id de la matière
- *    ← type d'examen
- *    ← nombre de questions
- *
- * ResultatScreen
- *    ← informations de la session terminée
- *
- * Les paramètres doivent être transmis proprement via la
- * navigation plutôt que de stocker inutilement ces données
- * dans les Composables.
- *
- * ------------------------------------------------------------
- * 🚫 À NE PAS FAIRE :
- *
- * ❌ Pas de logique métier.
- * ❌ Pas de calcul de score.
- * ❌ Pas de requêtes Room.
- * ❌ Pas d'accès direct aux DAO.
- * ❌ Pas de logique de validation du quiz.
- *
- * La navigation doit uniquement décider quel écran afficher
- * et transmettre les paramètres nécessaires.
- *
- * ------------------------------------------------------------
- * 🧠 RESPONSABILITÉ INTÉGRATION :
- *
- * Ce fichier doit être facilement compréhensible par toute
- * l'équipe.
- *
- * Les noms de routes doivent être cohérents et ne doivent
- * pas être modifiés sans vérifier les appels effectués
- * depuis les différents Screens.
- *
- * ------------------------------------------------------------
- * 🧪 TESTS À PRÉVOIR :
- *
- * Vérifier le parcours complet :
- *
- * Accueil
- *   ↓
- * Matières
- *   ↓
- * Quiz
- *   ↓
- * Résultat
- *
- * Vérifier également :
- *
- * - retour en arrière ;
- * - paramètres correctement transmis ;
- * - absence de route inconnue ;
- * - aucun écran supplémentaire inutile.
+ * - les destinations ;
+ * - les paramètres ;
+ * - les ViewModels ;
+ * - les callbacks.
  *
  * ============================================================
  */
 
-// TODO : définir les routes de navigation
-// TODO : créer le NavHost
-// TODO : déclarer les quatre destinations principales
-// TODO : connecter les callbacks de navigation des Screens
-// TODO : gérer les paramètres nécessaires au QuizScreen
-// TODO : gérer les paramètres nécessaires au ResultatScreen
+private object Routes {
+
+    const val ACCUEIL = "accueil"
+
+    const val MATIERES = "matieres"
+
+    const val QUIZ = "quiz"
+
+    const val RESULTAT = "resultat"
+
+    const val EXAMEN = "examen"
+
+    const val MATIERE_ID = "matiereId"
+
+    const val NOMBRE_QUESTIONS = "nombreQuestions"
+
+    const val QUIZ_ROUTE =
+        "$QUIZ/{$EXAMEN}/{$MATIERE_ID}/{$NOMBRE_QUESTIONS}"
+}
+
+@Composable
+fun AppNavigation(
+    repository: RevisionRepository
+) {
+    val navController = rememberNavController()
+
+    /*
+     * Résultat temporaire du dernier quiz.
+     *
+     * Il permet de transmettre le résultat du QuizScreen
+     * vers ResultatScreen.
+     */
+    var dernierResultat by remember {
+        mutableStateOf<QuizUiState.Finished?>(null)
+    }
+
+    NavHost(
+        navController = navController,
+        startDestination = Routes.ACCUEIL
+    ) {
+
+        /* ====================================================
+         * ACCUEIL
+         * ==================================================== */
+
+        composable(
+            route = Routes.ACCUEIL
+        ) {
+
+            val viewModel: AccueilViewModel = viewModel(
+                factory = AccueilViewModel.Factory(
+                    repository = repository
+                )
+            )
+
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                viewModel.charger()
+            }
+
+            AccueilScreen(
+                uiState = uiState,
+
+                onExamenSelected = { examen ->
+                    viewModel.selectionnerExamen(examen)
+
+                    navController.navigate(
+                        "${Routes.MATIERES}?${Routes.EXAMEN}=$examen"
+                    )
+                },
+
+                onOpenMatieres = {
+                    navController.navigate(
+                        Routes.MATIERES
+                    )
+                },
+
+                onReprendreRevision = {
+                    navController.navigate(
+                        Routes.MATIERES
+                    )
+                },
+
+                onRevoirErreurs = {
+                    navController.navigate(
+                        Routes.MATIERES
+                    )
+                }
+            )
+        }
+
+        /* ====================================================
+         * MATIÈRES
+         * ==================================================== */
+
+        composable(
+            route = "${Routes.MATIERES}?${Routes.EXAMEN}={${Routes.EXAMEN}}",
+            arguments = listOf(
+                navArgument(Routes.EXAMEN) {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+
+            val examen =
+                backStackEntry.arguments
+                    ?.getString(Routes.EXAMEN)
+                    ?: "BAC"
+
+            val viewModel: MatieresViewModel = viewModel(
+                factory = MatieresViewModel.Factory(
+                    repository = repository,
+                    examenInitial = examen
+                )
+            )
+
+            MatieresScreen(
+                viewModel = viewModel,
+
+                onRetourAccueil = {
+                    navController.popBackStack()
+                },
+
+                onLancerQuiz = { parametres ->
+
+                    navController.navigate(
+                        "${Routes.QUIZ}/" +
+                                "${parametres.examen}/" +
+                                "${parametres.matiereId}/" +
+                                parametres.nombreQuestions
+                    )
+                }
+            )
+        }
+
+        /* ====================================================
+         * QUIZ
+         * ==================================================== */
+
+        composable(
+            route = Routes.QUIZ_ROUTE,
+            arguments = listOf(
+                navArgument(Routes.EXAMEN) {
+                    type = NavType.StringType
+                },
+                navArgument(Routes.MATIERE_ID) {
+                    type = NavType.LongType
+                },
+                navArgument(Routes.NOMBRE_QUESTIONS) {
+                    type = NavType.IntType
+                }
+            )
+        ) { backStackEntry ->
+
+            val examen =
+                backStackEntry.arguments
+                    ?.getString(Routes.EXAMEN)
+                    ?: "BAC"
+
+            val matiereId =
+                backStackEntry.arguments
+                    ?.getLong(Routes.MATIERE_ID)
+                    ?: 0L
+
+            val nombreQuestions =
+                backStackEntry.arguments
+                    ?.getInt(Routes.NOMBRE_QUESTIONS)
+                    ?: 10
+
+            val viewModel: QuizViewModel = viewModel(
+                factory = QuizViewModel.Factory(
+                    repository = repository,
+                    examen = examen,
+                    matiereId = matiereId,
+                    nombreQuestions = nombreQuestions
+                )
+            )
+
+            QuizScreen(
+                viewModel = viewModel,
+
+                onRetourMatieres = {
+                    navController.popBackStack()
+                },
+
+                onAfficherResultat = { resultat ->
+
+                    dernierResultat = resultat
+
+                    navController.navigate(
+                        Routes.RESULTAT
+                    )
+                }
+            )
+        }
+
+        /* ====================================================
+         * RÉSULTAT
+         * ==================================================== */
+
+        composable(
+            route = Routes.RESULTAT
+        ) {
+
+            val resultat = dernierResultat
+
+            if (resultat == null) {
+
+                navController.navigate(
+                    Routes.ACCUEIL
+                ) {
+                    popUpTo(Routes.ACCUEIL) {
+                        inclusive = true
+                    }
+                }
+
+            } else {
+
+                /*
+                 * Le ResultatViewModel reçoit directement
+                 * la correction produite par le QuizViewModel.
+                 *
+                 * La conversion est faite avec l'extension
+                 * toCorrectionItems().
+                 */
+                val correction = resultat.toCorrectionItems()
+
+                val viewModel: ResultatViewModel = viewModel(
+                    factory = ResultatViewModel.Factory(
+                        repository = repository,
+                        correction = correction
+                    )
+                )
+
+                ResultatScreen(
+                    uiState = viewModel.uiState.collectAsStateWithLifecycle().value,
+
+                    onNextQuestion = {
+                        navController.popBackStack()
+                    },
+
+                    onRetourAccueil = {
+                        navController.popBackStack(
+                            Routes.ACCUEIL,
+                            inclusive = false
+                        )
+                    },
+
+                    onVoirPlusProgression = {
+                        // Progression intégrée au MVP.
+                    }
+                )
+            }
+        }
+    }
+}

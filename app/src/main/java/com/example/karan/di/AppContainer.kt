@@ -1,25 +1,26 @@
 package com.example.karan.di
 
+import android.content.Context
+import com.example.karan.data.local.AppDatabase
+import com.example.karan.data.local.SeedData
+import com.example.karan.data.repository.RevisionRepository
+import com.example.karan.data.repository.RevisionRepositoryImpl
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+
 /*
  * ============================================================
- * APP CONTAINER — INSTRUCTIONS DE TRAVAIL
+ * APP CONTAINER
  * ============================================================
  *
- * 👤 Responsable : N'famory Traore
+ * Responsable : N'famory Traore
  *
- * 🎯 OBJECTIF :
- * AppContainer centralise la création et la fourniture des
- * dépendances principales de l'application.
+ * Rôle :
+ * Centraliser la création des dépendances principales
+ * de l'application.
  *
- * Il permet notamment de construire :
- *
- * - AppDatabase ;
- * - les DAO ;
- * - RevisionRepository ;
- * - RevisionRepositoryImpl.
- *
- * ------------------------------------------------------------
- * 🔄 ARCHITECTURE :
+ * Architecture :
  *
  * AppContainer
  *      ↓
@@ -33,93 +34,94 @@ package com.example.karan.di
  *      ↓
  * ViewModel
  *
- * ------------------------------------------------------------
- * 🧠 POURQUOI UN CONTAINER ?
- *
- * On évite de créer la base de données et les repositories
- * directement dans les Screens.
- *
- * Exemple à éviter :
- *
- * Screen → Room.databaseBuilder(...)
- *
- * Les Screens doivent uniquement s'occuper de l'interface.
- *
- * ------------------------------------------------------------
- * 🗄️ BASE DE DONNÉES :
- *
- * AppContainer devra créer/récupérer une instance unique
- * d'AppDatabase pour l'application.
- *
- * Cette instance permettra d'obtenir :
- *
- * - MatiereDao
- * - QuestionDao
- * - SessionQuizDao
- * - FicheDao
- *
- * ------------------------------------------------------------
- * 📦 REPOSITORY :
- *
- * Le container devra construire une instance de
- * RevisionRepositoryImpl avec les DAO nécessaires.
- *
- * Mais les ViewModels devront recevoir :
- *
- * RevisionRepository
- *
- * et non directement :
- *
- * RevisionRepositoryImpl
- *
- * ------------------------------------------------------------
- * 🔗 DÉPENDANCES :
- *
- * AppContainer dépendra notamment de :
- *
- * - Context Android ;
- * - AppDatabase ;
- * - DAO ;
- * - RevisionRepository ;
- * - RevisionRepositoryImpl.
- *
- * ------------------------------------------------------------
- * 🚫 À NE PAS FAIRE :
- *
- * ❌ Pas de logique métier.
- * ❌ Pas de code Compose.
- * ❌ Pas de navigation.
- * ❌ Pas de calcul de score.
- * ❌ Pas de gestion du chronomètre.
- *
- * Le container sert uniquement à construire et fournir
- * les dépendances.
- *
- * ------------------------------------------------------------
- * 🧪 TESTS / INTÉGRATION :
- *
- * Vérifier que :
- *
- * - la base est correctement créée ;
- * - les DAO sont disponibles ;
- * - le Repository peut être créé ;
- * - les ViewModels peuvent recevoir le Repository.
- *
- * ------------------------------------------------------------
- * 👤 RESPONSABILITÉ INTÉGRATION :
- *
- * Ce fichier sera particulièrement important lors de
- * l'intégration finale du projet.
- *
- * Toute modification importante des dépendances doit être
- * vérifiée avant de fusionner les branches.
- *
  * ============================================================
  */
 
-// TODO : créer le conteneur AppContainer
-// TODO : récupérer le Context nécessaire
-// TODO : créer l'instance AppDatabase
-// TODO : récupérer les quatre DAO
-// TODO : créer RevisionRepositoryImpl
-// TODO : exposer le Repository sous forme de RevisionRepository
+class AppContainer(
+    context: Context
+) {
+
+    /*
+     * ========================================================
+     * BASE DE DONNÉES
+     * ========================================================
+     */
+
+    private val database: AppDatabase =
+        AppDatabase.getDatabase(context)
+
+    /*
+     * ========================================================
+     * DAO
+     * ========================================================
+     */
+
+    private val matiereDao =
+        database.matiereDao()
+
+    private val questionDao =
+        database.questionDao()
+
+    private val sessionQuizDao =
+        database.sessionQuizDao()
+
+    private val ficheDao =
+        database.ficheDao()
+
+    private val erreurQuestionDao = database.erreurQuestionDao()
+
+    /*
+     * ========================================================
+     * REPOSITORY
+     * ========================================================
+     */
+
+    val repository: RevisionRepository =
+        RevisionRepositoryImpl(
+            matiereDao = matiereDao,
+            questionDao = questionDao,
+            sessionQuizDao = sessionQuizDao,
+            ficheDao = ficheDao,
+            erreurQuestionDao = erreurQuestionDao
+        )
+
+    /*
+     * ========================================================
+     * DONNÉES INITIALES
+     * ========================================================
+     *
+     * On initialise les données uniquement si la base
+     * ne contient encore aucune matière.
+     */
+
+    init {
+        initialiserDonnees()
+    }
+
+    private fun initialiserDonnees() {
+
+        CoroutineScope(Dispatchers.IO).launch {
+
+            val matieresExistantes =
+                matiereDao.getMatieres("BAC") +
+                        matiereDao.getMatieres("BEPC")
+
+            if (matieresExistantes.isNotEmpty()) {
+                return@launch
+            }
+
+            matiereDao.insertMatieres(
+                SeedData.matieres
+            )
+
+            questionDao.insertQuestions(
+                SeedData.questions
+            )
+
+            ficheDao.insertFiches(
+                SeedData.fiches
+            )
+        }
+    }
+}
+

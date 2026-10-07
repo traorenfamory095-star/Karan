@@ -1,9 +1,11 @@
 package com.example.karan.viewmodels
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.karan.data.repository.RevisionRepository
+import com.example.karan.models.ErreurQuestion
 import com.example.karan.models.Question
 import com.example.karan.models.SessionQuiz
 import kotlinx.coroutines.CancellationException
@@ -19,191 +21,410 @@ import kotlinx.coroutines.launch
  */
 sealed interface QuizUiState {
 
-    object Loading : QuizUiState
+    /**
+     * Chargement des questions.
+     */
+    data object Loading : QuizUiState
 
-    /** Aucune question disponible pour cet examen / cette matière. */
-    object Empty : QuizUiState
+    /**
+     * Aucune question disponible.
+     */
+    data object Empty : QuizUiState
 
-    data class Error(val message: String) : QuizUiState
+    /**
+     * Une erreur est survenue pendant le chargement.
+     */
+    data class Error(
+        val message: String
+    ) : QuizUiState
 
-    /** Quiz en cours : une question à la fois. */
+    /**
+     * Quiz en cours.
+     */
     data class Ready(
         val question: Question,
         val indexActuel: Int,
         val totalQuestions: Int,
-        val reponseSelectionnee: String?,   // "A", "B", "C" ou "D" ; null si pas encore répondu
-        val correctionAffichee: Boolean,    // true dès qu'une réponse est choisie
-        val estCorrecte: Boolean?,          // null tant qu'il n'y a pas de réponse
+        val reponseSelectionnee: String?,
+        val correctionAffichee: Boolean,
+        val estCorrecte: Boolean?,
         val tempsRestantSecondes: Int,
         val score: Int
     ) : QuizUiState {
-        val estDerniereQuestion: Boolean get() = indexActuel == totalQuestions - 1
-        val progression: Float get() = (indexActuel + 1).toFloat() / totalQuestions
+
+        val estDerniereQuestion: Boolean
+            get() = indexActuel == totalQuestions - 1
+
+        val progression: Float
+            get() = if (totalQuestions <= 0) {
+                0f
+            } else {
+                (indexActuel + 1).toFloat() / totalQuestions
+            }
     }
 
-    /** Quiz terminé : infos pour l'écran Résultat et pour SessionQuiz. */
+    /**
+     * Quiz terminé.
+     */
     data class Finished(
         val score: Int,
         val totalQuestions: Int,
         val pourcentage: Int,
         val dureeSecondes: Int,
         val tempsEcoule: Boolean,
-        val questionsErronees: List<Question>,       // erreurs à revoir
-        val reponsesDonnees: Map<Long, String>,      // id de la question -> lettre choisie
+        val questionsErronees: List<Question>,
+        val reponsesDonnees: Map<Long, String>,
         val sessionEnregistree: Boolean = false
     ) : QuizUiState
 }
 
 class QuizViewModel(
     private val repository: RevisionRepository,
-    private val examen: String,              // "BAC" ou "BEPC"
+    private val examen: String,
     private val matiereId: Long,
     private val nombreQuestions: Int,
     private val dureeTotaleSecondes: Int = nombreQuestions * 30
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow<QuizUiState>(QuizUiState.Loading)
-    val uiState: StateFlow<QuizUiState> = _uiState.asStateFlow()
+    private val _uiState =
+        MutableStateFlow<QuizUiState>(QuizUiState.Loading)
 
-    // --- Données internes du quiz en cours ---
+    val uiState: StateFlow<QuizUiState> =
+        _uiState.asStateFlow()
+
+    // ============================================================
+    // DONNÉES INTERNES DU QUIZ
+    // ============================================================
+
     private var questions: List<Question> = emptyList()
+
     private var indexActuel = 0
+
     private var reponseSelectionnee: String? = null
+
     private var score = 0
+
     private var tempsRestant = dureeTotaleSecondes
+
     private var termine = false
+
     private val erreurs = mutableListOf<Question>()
-    private val reponsesDonnees = mutableMapOf<Long, String>()
+
+    private val reponsesDonnees =
+        mutableMapOf<Long, String>()
+
     private var chronoJob: Job? = null
 
     init {
-        require(nombreQuestions > 0) { "nombreQuestions doit être > 0" }
+        require(nombreQuestions > 0) {
+            "nombreQuestions doit être supérieur à 0."
+        }
+
+        require(dureeTotaleSecondes > 0) {
+            "dureeTotaleSecondes doit être supérieure à 0."
+        }
+
         chargerQuiz()
     }
 
-    // ------------------------------------------------------------
+    // ============================================================
     // CHARGEMENT
-    // ------------------------------------------------------------
+    // ============================================================
+
+    /**
+     * Charge les questions depuis le Repository.
+     */
     fun chargerQuiz() {
+
         chronoJob?.cancel()
+
+        termine = false
+
         _uiState.value = QuizUiState.Loading
+
         viewModelScope.launch {
+
             try {
-                val chargees = repository
-                    .getQuestions(examen, matiereId, nombreQuestions)
-                    .take(nombreQuestions) // gère aussi "moins de questions que demandé"
+
+                val chargees = repository.getQuestions(
+                    examen = examen,
+                    matiereId = matiereId,
+                    nombreQuestions = nombreQuestions
+                )
 
                 if (chargees.isEmpty()) {
+
                     _uiState.value = QuizUiState.Empty
+
                     return@launch
                 }
+
                 reinitialiser(chargees)
-                demarrerChrono()
+
                 publierEtat()
+
+                demarrerChrono()
+
             } catch (e: CancellationException) {
+
                 throw e
+
             } catch (e: Exception) {
+
                 _uiState.value = QuizUiState.Error(
-                    e.message ?: "Impossible de charger les questions"
+                    e.message
+                        ?: "Impossible de charger les questions."
                 )
             }
         }
     }
 
-    private fun reinitialiser(nouvellesQuestions: List<Question>) {
+    /**
+     * Réinitialise complètement le quiz.
+     */
+    private fun reinitialiser(
+        nouvellesQuestions: List<Question>
+    ) {
+
         questions = nouvellesQuestions
+
         indexActuel = 0
+
         reponseSelectionnee = null
+
         score = 0
+
         tempsRestant = dureeTotaleSecondes
+
         termine = false
+
         erreurs.clear()
+
         reponsesDonnees.clear()
     }
 
-    // ------------------------------------------------------------
+    // ============================================================
     // RÉPONSES
-    // ------------------------------------------------------------
+    // ============================================================
+
+    /**
+     * Sélectionne une réponse pour la question actuelle.
+     *
+     * Une question ne peut recevoir qu'une seule réponse.
+     */
     fun selectionnerReponse(choix: String) {
-        if (termine || questions.isEmpty()) return
-        if (choix.isBlank()) return                    // réponse vide
-        if (reponseSelectionnee != null) return        // déjà répondu : on bloque
+
+        if (termine || questions.isEmpty()) {
+            return
+        }
+
+        if (reponseSelectionnee != null) {
+            return
+        }
+
+        val choixNormalise =
+            choix.trim().uppercase()
+
+        if (choixNormalise !in setOf("A", "B", "C", "D")) {
+            return
+        }
 
         val question = questions[indexActuel]
-        reponseSelectionnee = choix
-        reponsesDonnees[question.id] = choix
 
-        if (estBonneReponse(question, choix)) {
+        reponseSelectionnee = choixNormalise
+
+        reponsesDonnees[question.id] =
+            choixNormalise
+
+        if (estBonneReponse(question, choixNormalise)) {
+
             score++
+
         } else {
-            erreurs.add(question)                      // erreur à revoir
+
+            erreurs.add(question)
+            enregistrerErreur(question)
         }
+
         publierEtat()
     }
 
-    private fun estBonneReponse(question: Question, choix: String): Boolean =
-        choix.trim().equals(question.reponseCorrecte.trim(), ignoreCase = true)
+    /**
+     * Vérifie si une réponse est correcte.
+     */
+    private fun estBonneReponse(
+        question: Question,
+        choix: String
+    ): Boolean {
 
-    // ------------------------------------------------------------
-    // NAVIGATION DANS LE QUIZ
-    // ------------------------------------------------------------
-    fun questionSuivante() {
-        if (termine || questions.isEmpty()) return
-        if (reponseSelectionnee == null) return        // il faut répondre avant de continuer
-
-        if (indexActuel >= questions.size - 1) {
-            terminerQuiz(tempsEcoule = false)
-        } else {
-            indexActuel++
-            reponseSelectionnee = null
-            publierEtat()
-        }
+        return choix
+            .trim()
+            .equals(
+                question.reponseCorrecte.trim(),
+                ignoreCase = true
+            )
     }
 
-    // ------------------------------------------------------------
+    // ============================================================
+    // NAVIGATION
+    // ============================================================
+
+    /**
+     * Passe à la question suivante.
+     *
+     * Une réponse doit obligatoirement être sélectionnée
+     * avant de continuer.
+     */
+    fun questionSuivante() {
+
+        if (termine || questions.isEmpty()) {
+            return
+        }
+
+        if (reponseSelectionnee == null) {
+            return
+        }
+
+        if (indexActuel >= questions.lastIndex) {
+
+            terminerQuiz(
+                tempsEcoule = false
+            )
+
+            return
+        }
+
+        indexActuel++
+
+        reponseSelectionnee = null
+
+        publierEtat()
+    }
+
+    // ============================================================
     // CHRONOMÈTRE
-    // ------------------------------------------------------------
+    // ============================================================
+
+    /**
+     * Démarre le compte à rebours.
+     */
     private fun demarrerChrono() {
+
         chronoJob?.cancel()
+
         chronoJob = viewModelScope.launch {
-            while (tempsRestant > 0) {
+
+            while (
+                tempsRestant > 0 &&
+                !termine
+            ) {
+
                 delay(1_000)
+
+                if (termine) {
+                    return@launch
+                }
+
                 tempsRestant--
+
                 publierEtat()
             }
-            terminerQuiz(tempsEcoule = true)
+
+            if (!termine && tempsRestant <= 0) {
+
+                terminerQuiz(
+                    tempsEcoule = true
+                )
+            }
         }
     }
 
-    // ------------------------------------------------------------
+    private fun enregistrerErreur(question: Question) {
+        viewModelScope.launch {
+            try {
+                repository.saveErreur(
+                    ErreurQuestion(
+                        questionId = question.id,
+                        matiereId = matiereId,
+                        examen = examen,
+                        date = System.currentTimeMillis()
+                    )
+                )
+                Log.d("QuizDebug", "erreur sauvegardée : ${question.id}")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("QuizDebug", "échec saveErreur", e)
+            }
+        }
+    }
+
+    // ============================================================
     // FIN DU QUIZ
-    // ------------------------------------------------------------
-    private fun terminerQuiz(tempsEcoule: Boolean) {
-        if (termine) return
+    // ============================================================
+
+    /**
+     * Termine le quiz et prépare les données
+     * destinées à ResultatScreen.
+     */
+    private fun terminerQuiz(
+        tempsEcoule: Boolean
+    ) {
+
+        if (termine) {
+            return
+        }
+
         termine = true
+
         chronoJob?.cancel()
 
         val total = questions.size
-        val duree = dureeTotaleSecondes - tempsRestant
-        val pourcentage = if (total == 0) 0 else (score * 100) / total
 
-        val resultat = QuizUiState.Finished(
-            score = score,
-            totalQuestions = total,
-            pourcentage = pourcentage,
-            dureeSecondes = duree,
-            tempsEcoule = tempsEcoule,
-            questionsErronees = erreurs.toList(),
-            reponsesDonnees = reponsesDonnees.toMap()
-        )
+        val duree = (
+                dureeTotaleSecondes - tempsRestant
+                ).coerceIn(
+                minimumValue = 0,
+                maximumValue = dureeTotaleSecondes
+            )
+
+        val pourcentage =
+            if (total <= 0) {
+                0
+            } else {
+                (score * 100) / total
+            }
+
+        val resultat =
+            QuizUiState.Finished(
+                score = score,
+                totalQuestions = total,
+                pourcentage = pourcentage,
+                dureeSecondes = duree,
+                tempsEcoule = tempsEcoule,
+                questionsErronees = erreurs.toList(),
+                reponsesDonnees = reponsesDonnees.toMap()
+            )
+
         _uiState.value = resultat
 
         enregistrerSession(resultat)
     }
 
-    private fun enregistrerSession(resultat: QuizUiState.Finished) {
+    /**
+     * Enregistre la session dans Room via le Repository.
+     *
+     * Une erreur de sauvegarde ne bloque pas l'affichage
+     * du résultat du quiz.
+     */
+
+    private fun enregistrerSession(
+        resultat: QuizUiState.Finished
+    ) {
         viewModelScope.launch {
+
             try {
+
                 repository.saveSession(
                     SessionQuiz(
                         matiereId = matiereId,
@@ -213,49 +434,90 @@ class QuizViewModel(
                         dureeSecondes = resultat.dureeSecondes
                     )
                 )
-                _uiState.value = resultat.copy(sessionEnregistree = true)
+
+                _uiState.value =
+                    resultat.copy(
+                        sessionEnregistree = true
+                    )
+
             } catch (e: CancellationException) {
+
                 throw e
+
             } catch (e: Exception) {
-                // La session n'a pas pu être sauvegardée ; l'écran Résultat reste affiché.
-                _uiState.value = resultat.copy(sessionEnregistree = false)
+                Log.e("QuizDebug", "échec saveSession", e)
+
+                _uiState.value =
+                    resultat.copy(
+                        sessionEnregistree = false
+                    )
             }
         }
     }
 
-    // ------------------------------------------------------------
-    // ÉTAT
-    // ------------------------------------------------------------
+    // ============================================================
+    // PUBLICATION DE L'ÉTAT
+    // ============================================================
+
+    /**
+     * Construit l'état Ready à partir
+     * des données internes du quiz.
+     */
     private fun publierEtat() {
-        if (termine || questions.isEmpty()) return
-        val question = questions[indexActuel]
-        val choix = reponseSelectionnee
-        _uiState.value = QuizUiState.Ready(
-            question = question,
-            indexActuel = indexActuel,
-            totalQuestions = questions.size,
-            reponseSelectionnee = choix,
-            correctionAffichee = choix != null,
-            estCorrecte = choix?.let { estBonneReponse(question, it) },
-            tempsRestantSecondes = tempsRestant,
-            score = score
-        )
+
+        if (termine || questions.isEmpty()) {
+            return
+        }
+
+        val question =
+            questions[indexActuel]
+
+        val choix =
+            reponseSelectionnee
+
+        _uiState.value =
+            QuizUiState.Ready(
+                question = question,
+                indexActuel = indexActuel,
+                totalQuestions = questions.size,
+                reponseSelectionnee = choix,
+                correctionAffichee = choix != null,
+                estCorrecte = choix?.let {
+                    estBonneReponse(
+                        question,
+                        it
+                    )
+                },
+                tempsRestantSecondes = tempsRestant,
+                score = score
+            )
     }
 
-    // ------------------------------------------------------------
-    // FACTORY (pour créer le ViewModel avec ses paramètres)
-    // ------------------------------------------------------------
+    // ============================================================
+    // FACTORY
+    // ============================================================
+
     class Factory(
         private val repository: RevisionRepository,
         private val examen: String,
         private val matiereId: Long,
         private val nombreQuestions: Int,
-        private val dureeTotaleSecondes: Int = nombreQuestions * 30
+        private val dureeTotaleSecondes: Int =
+            nombreQuestions * 30
     ) : ViewModelProvider.Factory {
+
         @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            QuizViewModel(
-                repository, examen, matiereId, nombreQuestions, dureeTotaleSecondes
+        override fun <T : ViewModel> create(
+            modelClass: Class<T>
+        ): T {
+
+            return QuizViewModel(
+                repository = repository,
+                examen = examen,
+                matiereId = matiereId,
+                nombreQuestions = nombreQuestions,
+                dureeTotaleSecondes = dureeTotaleSecondes
             ) as T
+        }
     }
 }
